@@ -9,7 +9,25 @@ if (!clientSideId) {
 }
 
 export const LDProvider = createLDReactProvider(clientSideId, {
-  kind: "user",
-  key: "demo-user",
-  name: "Demo User",
+  kind: "multi",
+
+  user: {
+    key: "maria-lopez",
+    name: "Maria Lopez",
+    role: "Operations Manager",
+    betaTester: false,
+  },
+
+  organization: {
+    key: "brightpath-logistics",
+    name: "BrightPath Logistics",
+    plan: "standard",
+    region: "US",
+  },
+
+  device: {
+    key: "maria-desktop",
+    type: "desktop",
+    browser: "Chrome",
+  },
 });
