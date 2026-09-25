@@ -103,11 +103,12 @@ export default function Home() {
     useState<PersonaKey>("maria");
 
   const [isSwitching, setIsSwitching] = useState(false);
-
   const [isRemediating, setIsRemediating] = useState(false);
+  const [remediationMessage, setRemediationMessage] = useState("");
 
-  const [remediationMessage, setRemediationMessage] =
-    useState("");
+  const [problemStatement, setProblemStatement] = useState("");
+  const [showRecommendation, setShowRecommendation] = useState(false);
+  const [conversionMessage, setConversionMessage] = useState("");
 
   const currentPersona = personas[currentPersonaKey];
 
@@ -118,6 +119,9 @@ export default function Home() {
 
     setIsSwitching(true);
     setRemediationMessage("");
+    setProblemStatement("");
+    setShowRecommendation(false);
+    setConversionMessage("");
 
     await ldClient.identify(personas[personaKey].context);
 
@@ -151,6 +155,26 @@ export default function Home() {
     } finally {
       setIsRemediating(false);
     }
+  }
+
+  function generateRecommendation() {
+    setShowRecommendation(true);
+    setConversionMessage("");
+  }
+
+  function trackDemoRequest(experience: "traditional" | "ai-advisor") {
+    if (ldClient) {
+      ldClient.track("demo-requested", {
+        experience,
+        user: currentPersona.label,
+        organization: currentPersona.company,
+        plan: currentPersona.plan,
+      });
+    }
+
+    setConversionMessage(
+      "Demo request received. Your ABC Cloud specialist will follow up with a tailored walkthrough."
+    );
   }
 
   return (
@@ -199,8 +223,8 @@ export default function Home() {
         </div>
       </div>
 
-      <section className="mx-auto grid min-h-[72vh] max-w-6xl items-center gap-12 px-10 py-16 md:grid-cols-2">
-        <div>
+      <section className="mx-auto grid min-h-[72vh] max-w-6xl items-start gap-12 px-10 py-16 md:grid-cols-2">
+        <div className="pt-8">
           <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-indigo-400">
             Enterprise Software
           </p>
@@ -220,9 +244,23 @@ export default function Home() {
               Ask our AI Advisor
             </button>
           ) : (
-            <button className="rounded-lg bg-white px-6 py-3 font-semibold text-slate-950">
+            <button
+              onClick={() => trackDemoRequest("traditional")}
+              className="rounded-lg bg-white px-6 py-3 font-semibold text-slate-950"
+            >
               Request a Demo
             </button>
+          )}
+
+          {conversionMessage && (
+            <div className="mt-5 rounded-xl border border-green-500/30 bg-green-950/30 p-4">
+              <p className="font-semibold text-green-300">
+                ✓ Demo request received
+              </p>
+              <p className="mt-1 text-sm text-slate-300">
+                {conversionMessage}
+              </p>
+            </div>
           )}
 
           <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900 p-5">
@@ -237,9 +275,7 @@ export default function Home() {
               </div>
 
               <div className="flex justify-between">
-                <span className="text-slate-400">
-                  Organization
-                </span>
+                <span className="text-slate-400">Organization</span>
                 <span>{currentPersona.company}</span>
               </div>
 
@@ -248,11 +284,13 @@ export default function Home() {
                 <span>{currentPersona.plan}</span>
               </div>
 
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-6">
                 <span className="text-slate-400">
                   Demo targeting path
                 </span>
-                <span>{currentPersona.expectedReason}</span>
+                <span className="text-right">
+                  {currentPersona.expectedReason}
+                </span>
               </div>
             </div>
           </div>
@@ -313,29 +351,114 @@ export default function Home() {
               </p>
 
               <h2 className="mb-3 text-2xl font-bold">
-                AI Solution Advisor
+                ✦ AI Solution Advisor
               </h2>
 
               <p className="mb-6 text-slate-400">
                 Tell us what your organization is trying to
-                accomplish and our AI advisor will help identify
-                the best ABC Cloud solution.
+                accomplish and our AI advisor will identify the
+                best ABC Cloud solution.
               </p>
 
-              <div className="rounded-xl border border-indigo-500/40 bg-slate-950 p-5">
-                <p className="mb-3 text-sm text-slate-400">
-                  What can we help you solve?
-                </p>
+              {!showRecommendation ? (
+                <div className="rounded-xl border border-indigo-500/40 bg-slate-950 p-5">
+                  <p className="mb-3 text-sm text-slate-400">
+                    What are you trying to solve?
+                  </p>
 
-                <div className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-slate-500">
-                  Example: We want to automate customer order
-                  processing...
+                  <textarea
+                    value={problemStatement}
+                    onChange={(event) =>
+                      setProblemStatement(event.target.value)
+                    }
+                    placeholder="Example: We want to automate customer order processing and reduce manual exceptions..."
+                    className="min-h-28 w-full resize-none rounded-lg border border-slate-700 bg-slate-900 p-4 text-white outline-none placeholder:text-slate-600 focus:border-indigo-500"
+                  />
+
+                  <button
+                    onClick={generateRecommendation}
+                    disabled={!problemStatement.trim()}
+                    className="mt-4 w-full rounded-lg bg-indigo-500 px-4 py-3 font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-700"
+                  >
+                    Generate My Recommendation
+                  </button>
                 </div>
+              ) : (
+                <div className="overflow-hidden rounded-2xl border border-indigo-400/40 bg-gradient-to-br from-indigo-950 to-slate-950">
+                  <div className="border-b border-indigo-500/20 p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-indigo-300">
+                          Your Recommended Solution
+                        </p>
 
-                <button className="mt-4 w-full rounded-lg bg-indigo-500 px-4 py-3 font-semibold text-white">
-                  Get Recommendation
-                </button>
-              </div>
+                        <h3 className="mt-2 text-2xl font-bold">
+                          Intelligent Order Automation
+                        </h3>
+
+                        <p className="mt-2 text-sm text-slate-400">
+                          Best fit for {currentPersona.company}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl bg-indigo-500/20 px-4 py-3 text-center">
+                        <div className="text-2xl font-bold text-indigo-300">
+                          92%
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          match
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6">
+                    <p className="mb-4 text-sm text-slate-300">
+                      Based on your organization, plan, and stated
+                      goals, ABC Cloud recommends a solution focused
+                      on intelligent automation and exception
+                      management.
+                    </p>
+
+                    <div className="space-y-3 text-sm">
+                      <div className="flex gap-3">
+                        <span className="text-green-400">✓</span>
+                        <span>Reduce manual order entry</span>
+                      </div>
+
+                      <div className="flex gap-3">
+                        <span className="text-green-400">✓</span>
+                        <span>Detect exceptions earlier</span>
+                      </div>
+
+                      <div className="flex gap-3">
+                        <span className="text-green-400">✓</span>
+                        <span>Automate repetitive workflows</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div className="h-full w-[92%] rounded-full bg-indigo-500"></div>
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        trackDemoRequest("ai-advisor")
+                      }
+                      className="mt-6 w-full rounded-lg bg-indigo-500 px-4 py-3 font-semibold text-white transition hover:bg-indigo-400"
+                    >
+                      Request My Demo
+                    </button>
+
+                    <button
+                      onClick={() => setShowRecommendation(false)}
+                      className="mt-3 w-full px-4 py-2 text-sm text-slate-400 hover:text-white"
+                    >
+                      Start over
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div>
