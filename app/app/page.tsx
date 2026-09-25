@@ -99,12 +99,15 @@ export default function Home() {
 
   const ldClient = useLDClient();
 
-  // Maria is our starting persona because ld-provider.tsx
-  // is currently initialized with Maria's context.
   const [currentPersonaKey, setCurrentPersonaKey] =
     useState<PersonaKey>("maria");
 
   const [isSwitching, setIsSwitching] = useState(false);
+
+  const [isRemediating, setIsRemediating] = useState(false);
+
+  const [remediationMessage, setRemediationMessage] =
+    useState("");
 
   const currentPersona = personas[currentPersonaKey];
 
@@ -114,13 +117,40 @@ export default function Home() {
     }
 
     setIsSwitching(true);
+    setRemediationMessage("");
 
-    // Tell LaunchDarkly that a different person,
-    // organization, and device are now using the app.
     await ldClient.identify(personas[personaKey].context);
 
     setCurrentPersonaKey(personaKey);
     setIsSwitching(false);
+  }
+
+  async function simulateIncident() {
+    setIsRemediating(true);
+
+    setRemediationMessage(
+      "Production issue detected. Triggering rollback..."
+    );
+
+    try {
+      const response = await fetch("/api/remediate", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Remediation failed");
+      }
+
+      setRemediationMessage(
+        "Rollback triggered. LaunchDarkly is turning the feature off."
+      );
+    } catch {
+      setRemediationMessage(
+        "Something went wrong while triggering remediation."
+      );
+    } finally {
+      setIsRemediating(false);
+    }
   }
 
   return (
@@ -225,6 +255,39 @@ export default function Home() {
                 <span>{currentPersona.expectedReason}</span>
               </div>
             </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-red-500/30 bg-red-950/20 p-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-red-400">
+              Production Operations
+            </p>
+
+            <h3 className="mt-2 text-lg font-semibold">
+              Incident Simulator
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Simulate a production issue and use a LaunchDarkly
+              trigger to immediately disable the new experience.
+            </p>
+
+            <button
+              onClick={simulateIncident}
+              disabled={isRemediating || !aiSolutionAdvisor}
+              className="mt-4 w-full rounded-lg bg-red-600 px-4 py-3 font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            >
+              {isRemediating
+                ? "Triggering Rollback..."
+                : aiSolutionAdvisor
+                  ? "Simulate Production Incident"
+                  : "Feature Already Off"}
+            </button>
+
+            {remediationMessage && (
+              <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm text-slate-300">
+                {remediationMessage}
+              </div>
+            )}
           </div>
         </div>
 
