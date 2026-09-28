@@ -106,6 +106,14 @@ If a capability is available in production, should every customer receive it at 
 
 ABC Cloud uses targeting to control who receives the AI Solution Advisor.
 
+The application sends LaunchDarkly context information across:
+
+```text
+user
+organization
+device
+```
+
 The demo uses three customer personas.
 
 ---
@@ -177,9 +185,11 @@ The application calls a private server-side endpoint:
 POST /api/remediate
 ```
 
-That endpoint invokes a LaunchDarkly trigger that disables the feature.
+That endpoint invokes a LaunchDarkly generic trigger.
 
-The running browser receives the updated flag decision and immediately returns the user to the traditional experience.
+The trigger disables the feature, and the running browser immediately receives the updated flag decision.
+
+The customer is returned to the traditional experience without a new deployment.
 
 ### Demo flow
 
@@ -293,21 +303,29 @@ To demonstrate the experiment mechanics, the project includes a synthetic traffi
 /traffic
 ```
 
-The simulator creates demo visitors and conversion behavior.
+The traffic simulator calls the server-side endpoint:
+
+```text
+POST /api/simulate-traffic
+```
+
+The server-side LaunchDarkly SDK creates unique synthetic visitors and evaluates each visitor against the real feature flag and experiment.
 
 ## Real LaunchDarkly behavior
 
 - Feature flag evaluation
 - Variation assignment
 - Experiment exposure
-- `demo-requested` events
-- Experiment metric processing
+- `demo-requested` metric events
+- Experiment processing
 
 ## Simulated behavior
 
 - Visitor identities
 - Conversion probability
 - Customer behavior
+
+The simulator clearly identifies which behavior is real and which behavior is simulated.
 
 Synthetic results are used only to demonstrate how the experiment is instrumented and measured.
 
@@ -342,7 +360,7 @@ The running application retrieves and displays the current:
 - AI model
 - provider
 - temperature
-- token configuration
+- maximum token configuration
 - agent prompt / instructions
 
 The active configuration appears in the application under:
@@ -413,6 +431,20 @@ This keeps the demonstration focused on LaunchDarkly's runtime AI configuration 
 
 ---
 
+# Technology
+
+The application is built with:
+
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- LaunchDarkly React SDK
+- LaunchDarkly Node Server SDK
+- LaunchDarkly Server AI SDK / AgentControl
+
+---
+
 # Application Routes
 
 Main ABC Cloud application:
@@ -425,6 +457,12 @@ Experiment traffic simulator:
 
 ```text
 /traffic
+```
+
+Reliable server-side synthetic traffic endpoint:
+
+```text
+POST /api/simulate-traffic
 ```
 
 Production remediation endpoint:
@@ -441,17 +479,17 @@ POST /api/agent-config
 
 ---
 
-# Technology
+# Prerequisites and Assumptions
 
-The application is built with:
+To reproduce the full demo, the user should have:
 
-- Next.js
-- React
-- TypeScript
-- Tailwind CSS
-- LaunchDarkly React SDK
-- LaunchDarkly Node Server SDK
-- LaunchDarkly Server AI SDK / AgentControl
+- Node.js 20 or later
+- npm
+- A LaunchDarkly account or trial
+- A LaunchDarkly project with a Production environment
+- Permission to create feature flags, targeting rules, experiments, metrics, triggers, and AgentControl configurations
+
+The application can also be run entirely through GitHub Codespaces without installing Node.js locally.
 
 ---
 
@@ -459,9 +497,7 @@ The application is built with:
 
 ## GitHub Codespaces
 
-The project can be run entirely through GitHub Codespaces.
-
-1. Open the repository.
+1. Open this repository in GitHub.
 2. Click **Code**.
 3. Select **Codespaces**.
 4. Create or open a Codespace.
@@ -485,20 +521,21 @@ Open forwarded port:
 
 ## Local Development
 
-Requirements:
-
-```text
-Node.js 20+
-npm
-```
-
 Clone the repository:
 
 ```bash
 git clone https://github.com/eglisti01/Launchdarkly-se-demo.git
+```
 
+Enter the application directory:
+
+```bash
 cd Launchdarkly-se-demo/app
+```
 
+Install dependencies:
+
+```bash
 npm install
 ```
 
@@ -509,6 +546,8 @@ Create:
 ```
 
 inside the `app` directory.
+
+Add the required environment variables described below.
 
 Then run:
 
@@ -526,6 +565,12 @@ http://localhost:3000
 
 # Environment Variables
 
+A safe example is included in:
+
+```text
+app/.env.example
+```
+
 The application expects:
 
 ```env
@@ -541,17 +586,206 @@ Used for browser-based feature flag evaluation and targeting.
 
 ## LAUNCHDARKLY_TRIGGER_URL
 
-Private trigger URL used for the remediation demonstration.
+Private generic trigger URL used for the remediation demonstration.
 
 ## LAUNCHDARKLY_SDK_KEY
 
-Private server-side LaunchDarkly SDK key.
+Private LaunchDarkly server SDK key used by the server-side traffic simulator and AgentControl integration.
 
 ## LAUNCHDARKLY_AI_CONFIG_KEY
 
 AgentControl configuration key used by the AI Solution Advisor.
 
 Private values are intentionally excluded from source control.
+
+The real `.env.local` file should never be committed.
+
+---
+
+# LaunchDarkly Setup Checklist
+
+A LaunchDarkly project and Production environment are required to reproduce the full demo.
+
+---
+
+## 1. Create the Feature Flag
+
+Create a Boolean feature flag with the key:
+
+```text
+ai-solution-advisor
+```
+
+Variations:
+
+```text
+false → Traditional Demo Request
+true  → AI Solution Advisor
+```
+
+The flag is used throughout release management, targeting, remediation, and experimentation.
+
+---
+
+## 2. Configure Targeting
+
+The application sends LaunchDarkly context information for:
+
+```text
+user
+organization
+device
+```
+
+Configure the Production environment to demonstrate the following targeting paths.
+
+### Individual target
+
+Target:
+
+```text
+Jordan Lee
+user key: jordan-lee
+```
+
+Serve:
+
+```text
+true
+```
+
+This demonstrates individual targeting.
+
+### Rule-based target
+
+Create a rule using:
+
+```text
+organization.plan = enterprise
+```
+
+Serve:
+
+```text
+true
+```
+
+James Carter belongs to Acme Industries with an Enterprise plan and demonstrates this targeting path.
+
+Users that do not match either condition continue to the default rule.
+
+---
+
+## 3. Configure Remediation
+
+Create a LaunchDarkly generic trigger that disables:
+
+```text
+ai-solution-advisor
+```
+
+Store the private trigger URL in:
+
+```env
+LAUNCHDARKLY_TRIGGER_URL=
+```
+
+The application invokes the trigger through:
+
+```text
+POST /api/remediate
+```
+
+The trigger URL remains server-side and should never be committed to source control.
+
+---
+
+## 4. Configure the Experiment Metric
+
+Create a custom conversion metric named:
+
+```text
+Demo Request Conversion - AI Advisor
+```
+
+using the custom event key:
+
+```text
+demo-requested
+```
+
+The metric measures conversion occurrence rather than a numeric value.
+
+---
+
+## 5. Configure the Experiment
+
+Create an experiment using:
+
+```text
+ai-solution-advisor
+```
+
+Control:
+
+```text
+false
+```
+
+Treatment:
+
+```text
+true
+```
+
+Demo configuration:
+
+```text
+50% Control
+50% Treatment
+Randomization context: user
+```
+
+The experiment is connected to the default targeting rule so visitors who do not match the individual or Enterprise targeting rules can enter the experiment.
+
+The `/traffic` page generates synthetic demo traffic by calling:
+
+```text
+POST /api/simulate-traffic
+```
+
+LaunchDarkly performs the real:
+
+- feature flag evaluations
+- variation assignments
+- experiment exposures
+- `demo-requested` event collection
+
+Visitor identities and conversion behavior are synthetic and should not be interpreted as real customer performance data.
+
+---
+
+## 6. Configure AgentControl
+
+Create an AgentControl / AI configuration and store its configuration key in:
+
+```env
+LAUNCHDARKLY_AI_CONFIG_KEY=
+```
+
+The demo retrieves the active configuration at runtime and displays:
+
+- model
+- provider
+- temperature
+- maximum tokens
+- active prompt
+
+The configuration can be changed in LaunchDarkly without redeploying the ABC Cloud application.
+
+The demo has been validated with runtime changes to both the prompt and model.
+
+No external model-provider API key is required to demonstrate the LaunchDarkly configuration workflow because the final recommendation text is intentionally simulated.
 
 ---
 
@@ -566,7 +800,10 @@ Launchdarkly-se-demo
 │   │   │   ├── agent-config
 │   │   │   │   └── route.ts
 │   │   │   │
-│   │   │   └── remediate
+│   │   │   ├── remediate
+│   │   │   │   └── route.ts
+│   │   │   │
+│   │   │   └── simulate-traffic
 │   │   │       └── route.ts
 │   │   │
 │   │   ├── traffic
@@ -576,6 +813,7 @@ Launchdarkly-se-demo
 │   │   ├── layout.tsx
 │   │   └── page.tsx
 │   │
+│   ├── .env.example
 │   └── package.json
 │
 └── README.md
@@ -591,7 +829,13 @@ The live demonstration follows one customer story.
 
 Turn the AI Solution Advisor ON and OFF through LaunchDarkly.
 
-Show that the customer experience changes immediately without a deployment.
+Show that the customer experience changes immediately without a deployment or page refresh.
+
+### Customer takeaway
+
+**Deployment and release are separate decisions.**
+
+---
 
 ## 2. Target
 
@@ -603,7 +847,19 @@ James Carter
 Maria Lopez
 ```
 
-Show individual targeting, rule-based targeting, and default behavior.
+Show:
+
+```text
+Jordan → individual targeting
+James  → Enterprise rule
+Maria  → default / experiment path
+```
+
+### Customer takeaway
+
+**LaunchDarkly controls not only whether a feature is released, but who receives it.**
+
+---
 
 ## 3. Remediate
 
@@ -616,6 +872,12 @@ Simulate Production Incident
 ```
 
 Show the experience immediately returning to the known-good version.
+
+### Customer takeaway
+
+**Production recovery does not require another deployment.**
+
+---
 
 ## 4. Measure
 
@@ -631,7 +893,25 @@ and:
 demo-requested
 ```
 
-Show experiment exposures and the conversion metric.
+Open:
+
+```text
+/traffic
+```
+
+Generate synthetic traffic and show:
+
+- control assignments
+- treatment assignments
+- conversion events
+- LaunchDarkly exposure events
+- experiment results as they are processed
+
+### Customer takeaway
+
+**The team can measure business outcomes rather than assuming a new feature is better.**
+
+---
 
 ## 5. Control AI Runtime
 
@@ -645,9 +925,19 @@ LIVE AGENTCONTROL CONFIG
 
 Change the prompt or model inside LaunchDarkly.
 
-Return to ABC Cloud and refresh the AI configuration.
+Return to ABC Cloud and select:
 
-Show that the running application receives the new model or prompt without a redeployment.
+```text
+Start over / Refresh AI Config
+```
+
+Generate again.
+
+Show that the running application receives the new model or prompt without changing or redeploying application code.
+
+### Customer takeaway
+
+**LaunchDarkly's runtime-control model can extend beyond feature delivery into AI behavior.**
 
 ---
 
@@ -673,6 +963,18 @@ The core principle behind the demo is:
 
 > Deployment determines what code exists in production. LaunchDarkly provides control over who experiences it, when they experience it, how safely exposure can change, how business impact is measured, and how runtime behavior can evolve.
 
+For ABC Cloud, the feature flag becomes more than an ON/OFF switch.
+
+It becomes the runtime control point connecting:
+
+```text
+Release
+Targeting
+Remediation
+Experimentation
+AgentControl
+```
+
 ---
 
 # Security
@@ -684,5 +986,7 @@ This repository does not intentionally contain:
 - external AI provider API keys
 
 Private values are stored in `.env.local`, which is excluded from source control.
+
+A safe `.env.example` file is included so the required configuration is clear without exposing credentials.
 
 This project is an interview demonstration application and is not intended to represent a complete production architecture.
