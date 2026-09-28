@@ -91,6 +91,19 @@ const personas = {
 
 type PersonaKey = keyof typeof personas;
 
+type AgentConfig = {
+  success: boolean;
+  configKey: string;
+  model: string;
+  provider: string;
+  parameters: {
+    temperature?: number;
+    max_tokens?: number;
+    [key: string]: unknown;
+  };
+  instructions: string;
+};
+
 export default function Home() {
   const aiSolutionAdvisor = useBoolVariation(
     "ai-solution-advisor",
@@ -110,6 +123,12 @@ export default function Home() {
   const [showRecommendation, setShowRecommendation] = useState(false);
   const [conversionMessage, setConversionMessage] = useState("");
 
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(
+    null
+  );
+  const [agentConfigError, setAgentConfigError] = useState("");
+
   const currentPersona = personas[currentPersonaKey];
 
   async function switchPersona(personaKey: PersonaKey) {
@@ -122,6 +141,8 @@ export default function Home() {
     setProblemStatement("");
     setShowRecommendation(false);
     setConversionMessage("");
+    setAgentConfig(null);
+    setAgentConfigError("");
 
     await ldClient.identify(personas[personaKey].context);
 
@@ -157,12 +178,54 @@ export default function Home() {
     }
   }
 
-  function generateRecommendation() {
-    setShowRecommendation(true);
+  async function generateRecommendation() {
+    if (!problemStatement.trim()) {
+      return;
+    }
+
+    setIsLoadingConfig(true);
+    setAgentConfigError("");
     setConversionMessage("");
+
+    try {
+      const response = await fetch("/api/agent-config", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          problem: problemStatement,
+          userKey: currentPersona.context.user.key,
+          userName: currentPersona.label,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.details ||
+            data.error ||
+            "Could not retrieve AgentControl config."
+        );
+      }
+
+      setAgentConfig(data);
+      setShowRecommendation(true);
+    } catch (error) {
+      setAgentConfigError(
+        error instanceof Error
+          ? error.message
+          : "Could not retrieve AgentControl configuration."
+      );
+    } finally {
+      setIsLoadingConfig(false);
+    }
   }
 
-  function trackDemoRequest(experience: "traditional" | "ai-advisor") {
+  function trackDemoRequest(
+    experience: "traditional" | "ai-advisor"
+  ) {
     if (ldClient) {
       ldClient.track("demo-requested", {
         experience,
@@ -176,6 +239,20 @@ export default function Home() {
       "Demo request received. Your ABC Cloud specialist will follow up with a tailored walkthrough."
     );
   }
+
+  function startOver() {
+    setShowRecommendation(false);
+    setProblemStatement("");
+    setConversionMessage("");
+    setAgentConfig(null);
+    setAgentConfigError("");
+  }
+
+  const promptPreview = agentConfig?.instructions
+    ? agentConfig.instructions.length > 250
+      ? `${agentConfig.instructions.slice(0, 250)}...`
+      : agentConfig.instructions
+    : "";
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -223,7 +300,7 @@ export default function Home() {
         </div>
       </div>
 
-      <section className="mx-auto grid min-h-[72vh] max-w-6xl items-start gap-12 px-10 py-16 md:grid-cols-2">
+      <section className="mx-auto grid max-w-6xl items-start gap-12 px-10 py-16 md:grid-cols-2">
         <div className="pt-8">
           <p className="mb-4 text-sm font-semibold uppercase tracking-widest text-indigo-400">
             Enterprise Software
@@ -275,7 +352,9 @@ export default function Home() {
               </div>
 
               <div className="flex justify-between">
-                <span className="text-slate-400">Organization</span>
+                <span className="text-slate-400">
+                  Organization
+                </span>
                 <span>{currentPersona.company}</span>
               </div>
 
@@ -377,85 +456,177 @@ export default function Home() {
 
                   <button
                     onClick={generateRecommendation}
-                    disabled={!problemStatement.trim()}
+                    disabled={
+                      !problemStatement.trim() || isLoadingConfig
+                    }
                     className="mt-4 w-full rounded-lg bg-indigo-500 px-4 py-3 font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-700"
                   >
-                    Generate My Recommendation
+                    {isLoadingConfig
+                      ? "Loading AgentControl Config..."
+                      : "Generate My Recommendation"}
                   </button>
+
+                  {agentConfigError && (
+                    <div className="mt-4 rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-sm text-red-300">
+                      {agentConfigError}
+                    </div>
+                  )}
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-2xl border border-indigo-400/40 bg-gradient-to-br from-indigo-950 to-slate-950">
-                  <div className="border-b border-indigo-500/20 p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-indigo-300">
-                          Your Recommended Solution
+                <div>
+                  {agentConfig && (
+                    <div className="mb-5 rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-widest text-cyan-300">
+                            ● Live AgentControl Config
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Retrieved from LaunchDarkly at runtime
+                          </p>
+                        </div>
+
+                        <span className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-bold text-cyan-300">
+                          LIVE
+                        </span>
+                      </div>
+
+                      <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                        <div className="rounded-lg bg-slate-950 p-3">
+                          <p className="text-xs text-slate-500">
+                            Model
+                          </p>
+                          <p className="mt-1 font-semibold text-cyan-200">
+                            {agentConfig.model}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-slate-950 p-3">
+                          <p className="text-xs text-slate-500">
+                            Provider
+                          </p>
+                          <p className="mt-1 font-semibold">
+                            {agentConfig.provider}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-slate-950 p-3">
+                          <p className="text-xs text-slate-500">
+                            Temperature
+                          </p>
+                          <p className="mt-1 font-semibold">
+                            {String(
+                              agentConfig.parameters
+                                ?.temperature ?? "—"
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg bg-slate-950 p-3">
+                          <p className="text-xs text-slate-500">
+                            Max tokens
+                          </p>
+                          <p className="mt-1 font-semibold">
+                            {String(
+                              agentConfig.parameters
+                                ?.max_tokens ?? "—"
+                            )}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 rounded-lg bg-slate-950 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                          Active prompt preview
                         </p>
 
-                        <h3 className="mt-2 text-2xl font-bold">
-                          Intelligent Order Automation
-                        </h3>
-
-                        <p className="mt-2 text-sm text-slate-400">
-                          Best fit for {currentPersona.company}
+                        <p className="mt-2 whitespace-pre-line text-xs leading-5 text-slate-400">
+                          {promptPreview}
                         </p>
                       </div>
 
-                      <div className="rounded-xl bg-indigo-500/20 px-4 py-3 text-center">
-                        <div className="text-2xl font-bold text-indigo-300">
-                          92%
+                      <p className="mt-3 text-xs text-amber-300">
+                        Demo note: model and prompt configuration are
+                        live from LaunchDarkly. Recommendation text is
+                        simulated because no external model API key is
+                        configured.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="overflow-hidden rounded-2xl border border-indigo-400/40 bg-gradient-to-br from-indigo-950 to-slate-950">
+                    <div className="border-b border-indigo-500/20 p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-300">
+                            Your Recommended Solution
+                          </p>
+
+                          <h3 className="mt-2 text-2xl font-bold">
+                            Intelligent Order Automation
+                          </h3>
+
+                          <p className="mt-2 text-sm text-slate-400">
+                            Best fit for {currentPersona.company}
+                          </p>
                         </div>
-                        <div className="text-xs text-slate-400">
-                          match
+
+                        <div className="rounded-xl bg-indigo-500/20 px-4 py-3 text-center">
+                          <div className="text-2xl font-bold text-indigo-300">
+                            92%
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            match
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="p-6">
-                    <p className="mb-4 text-sm text-slate-300">
-                      Based on your organization, plan, and stated
-                      goals, ABC Cloud recommends a solution focused
-                      on intelligent automation and exception
-                      management.
-                    </p>
+                    <div className="p-6">
+                      <p className="mb-4 text-sm text-slate-300">
+                        Based on your organization, plan, and stated
+                        goals, ABC Cloud recommends a solution focused
+                        on intelligent automation and exception
+                        management.
+                      </p>
 
-                    <div className="space-y-3 text-sm">
-                      <div className="flex gap-3">
-                        <span className="text-green-400">✓</span>
-                        <span>Reduce manual order entry</span>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex gap-3">
+                          <span className="text-green-400">✓</span>
+                          <span>Reduce manual order entry</span>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <span className="text-green-400">✓</span>
+                          <span>Detect exceptions earlier</span>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <span className="text-green-400">✓</span>
+                          <span>Automate repetitive workflows</span>
+                        </div>
                       </div>
 
-                      <div className="flex gap-3">
-                        <span className="text-green-400">✓</span>
-                        <span>Detect exceptions earlier</span>
+                      <div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-800">
+                        <div className="h-full w-[92%] rounded-full bg-indigo-500"></div>
                       </div>
 
-                      <div className="flex gap-3">
-                        <span className="text-green-400">✓</span>
-                        <span>Automate repetitive workflows</span>
-                      </div>
+                      <button
+                        onClick={() =>
+                          trackDemoRequest("ai-advisor")
+                        }
+                        className="mt-6 w-full rounded-lg bg-indigo-500 px-4 py-3 font-semibold text-white transition hover:bg-indigo-400"
+                      >
+                        Request My Demo
+                      </button>
+
+                      <button
+                        onClick={startOver}
+                        className="mt-3 w-full px-4 py-2 text-sm text-slate-400 hover:text-white"
+                      >
+                        Start over / Refresh AI Config
+                      </button>
                     </div>
-
-                    <div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-800">
-                      <div className="h-full w-[92%] rounded-full bg-indigo-500"></div>
-                    </div>
-
-                    <button
-                      onClick={() =>
-                        trackDemoRequest("ai-advisor")
-                      }
-                      className="mt-6 w-full rounded-lg bg-indigo-500 px-4 py-3 font-semibold text-white transition hover:bg-indigo-400"
-                    >
-                      Request My Demo
-                    </button>
-
-                    <button
-                      onClick={() => setShowRecommendation(false)}
-                      className="mt-3 w-full px-4 py-2 text-sm text-slate-400 hover:text-white"
-                    >
-                      Start over
-                    </button>
                   </div>
                 </div>
               )}
