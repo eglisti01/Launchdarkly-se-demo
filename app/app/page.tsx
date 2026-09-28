@@ -87,7 +87,7 @@ const personas = {
       },
     },
   },
-};
+} as const;
 
 type PersonaKey = keyof typeof personas;
 
